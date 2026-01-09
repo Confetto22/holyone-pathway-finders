@@ -1,0 +1,274 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String    // Hashed with bcrypt
+  name      String
+  phone         String?
+  country       String?
+  role          UserRole  @default(CUSTOMER)
+  emailVerified Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+
+  // Relations
+  orders        Order[]
+  documents     Document[]
+  tokens Token[]
+
+  @@index([email])
+  @@index([role])
+  @@index([createdAt])
+  @@map("users")
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+}
+
+
+model Token {
+  id        String    @id @default(uuid())
+  token     String    @unique // The actual token string
+  type      TokenType // RESET_PASSWORD, EMAIL_VERIFICATION, etc.
+  expiresAt DateTime
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+enum TokenType {
+  RESET_PASSWORD
+  EMAIL_VERIFICATION
+}
+
+
+
+// ============================================
+// SERVICES
+// ============================================
+
+model Service {
+  id              String          @id @default(uuid())
+  type            ServiceType
+  title           String
+  slug            String          @unique
+  description     String
+  price           Decimal         @db.Decimal(10, 2)
+  oldPrice        Decimal?        @db.Decimal(10, 2)
+  images          String[]
+  specs           Json?
+  features        String[]
+  region          String?
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+// relations
+  orders Order[]
+
+  @@index([type])
+  @@index([slug])
+  @@map("services")
+}
+
+enum ServiceType {
+  MAIN      // Main packages (Starter, Professional, Premium)
+  MICRO     // Micro services (individual services)
+  DIGITAL   // Digital products (downloadable guides)
+}
+
+// ============================================
+// ORDERS
+// ============================================
+
+model Order {
+  id              String       @id @default(uuid())
+  orderNumber     String       @unique
+  userId          String
+  serviceId       String
+  status          OrderStatus  @default(PENDING)
+  totalAmount     Decimal      @db.Decimal(10, 2)
+  currency        String       @default("USD")
+
+  // Customer Information (JSON for flexibility)
+  customerInfo    Json         // { fullName, email, phone, country }
+
+  // Service-Specific Details (JSON for different service types)
+  serviceDetails  Json?        // { destination, travelDate, passportNumber, etc. }
+
+  // Service Snapshot (store service data at time of purchase)
+  serviceSnapshot Json         // Complete service object
+
+  // Metadata
+  notes           String?
+  adminNotes      String?
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+
+  // Relations
+  user            User         @relation(fields: [userId], references: [id])
+  service         Service      @relation(fields: [serviceId], references: [id])
+  payment         Payment?
+  documents       Document[]
+
+  @@index([userId])
+  @@index([serviceId])
+  @@index([status])
+  @@index([orderNumber])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+enum OrderStatus {
+  PENDING           // Order created, payment pending
+  CONFIRMED         // Payment confirmed
+  IN_PROGRESS       // Service being delivered
+  AWAITING_DOCS     // Waiting for customer documents
+  UNDER_REVIEW      // Documents under review
+  COMPLETED         // Service completed
+  CANCELLED         // Order cancelled
+  REFUNDED          // Order refunded
+}
+
+// ============================================
+// PAYMENTS
+// ============================================
+
+model Payment {
+  id                     String        @id @default(uuid())
+  orderId                String        @unique
+  amount                 Decimal       @db.Decimal(10, 2)
+  currency               String        @default("USD")
+  status                 PaymentStatus @default(PENDING)
+  paymentMethod          String        // "card", "paypal", "bank_transfer"
+
+  // Stripe Integration
+  stripePaymentIntentId  String?       @unique
+  stripeChargeId         String?       @unique
+  stripeCustomerId       String?
+
+  // Payment Details
+  cardLast4              String?
+  cardBrand              String?
+  cardCountry            String?
+
+  // Metadata
+  failureReason          String?
+  failureCode            String?
+
+  // Refunds
+  refundAmount           Decimal?      @db.Decimal(10, 2)
+  refundReason           String?
+  refundedAt             DateTime?
+  refundedBy             String?       // Admin user ID
+
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  paidAt                 DateTime?
+
+  // Relations
+  order                  Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([status])
+  @@index([stripePaymentIntentId])
+  @@index([createdAt])
+  @@map("payments")
+}
+
+enum PaymentStatus {
+  PENDING       // Payment initiated
+  PROCESSING    // Payment being processed
+  SUCCEEDED     // Payment successful
+  FAILED        // Payment failed
+  REFUNDED      // Payment refunded
+  PARTIALLY_REFUNDED // Partial refund issued
+  CANCELLED     // Payment cancelled
+}
+
+// ============================================
+// DOCUMENTS
+// ============================================
+
+model Document {
+  id              String         @id @default(uuid())
+  userId          String
+  orderId         String?
+
+  // File Information
+  fileName        String
+  originalName    String
+  fileUrl         String
+  fileSize        Int            // Size in bytes
+  mimeType        String
+
+  // Categorization
+  category        DocumentCategory
+  description     String?
+
+  // Verification
+  status          DocumentStatus @default(PENDING)
+  verifiedBy      String?        // Admin/Consultant user ID
+  verifiedAt      DateTime?
+  rejectionReason String?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order           Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([orderId])
+  @@index([status])
+  @@index([category])
+  @@index([createdAt])
+  @@map("documents")
+}
+
+enum DocumentCategory {
+  PASSPORT
+  PHOTO
+  BANK_STATEMENT
+  PROOF_OF_FUNDS
+  TRAVEL_ITINERARY
+  ACCOMMODATION_PROOF
+  EMPLOYMENT_LETTER
+  EDUCATION_CERTIFICATE
+  VISA_COPY
+  FLIGHT_TICKET
+  INSURANCE
+  INVITATION_LETTER
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING       // Awaiting review
+  VERIFIED      // Approved by admin/consultant
+  REJECTED      // Rejected, needs replacement
+  ARCHIVED      // Old version, replaced
+}
