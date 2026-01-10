@@ -23,8 +23,13 @@ export class OrdersService {
     const findUser = await this.db.user.findUnique({
       where: {
         email: customerInfo?.email,
+        name: customerInfo?.fullName,
+        phone: customerInfo?.phone,
       },
     });
+    if (!findUser) {
+      throw new NotFoundException(`User not found`);
+    }
 
     const newOrder = await this.db.order.create({
       data: {
@@ -57,21 +62,21 @@ export class OrdersService {
     };
   }
 
-  findAll() {
-    return `This action returns all orders`;
-  }
+  // findAll() {
+  //   return `This action returns all orders`;
+  // }
 
-  findOne(id: number) {
-    return `This action returns a #${id} order`;
-  }
+  // findOne(id: number) {
+  //   return `This action returns a #${id} order`;
+  // }
 
-  update(id: number, updateOrderDto: UpdateOrderDto) {
-    return `This action updates a #${id} order`;
-  }
+  // update(id: number, updateOrderDto: UpdateOrderDto) {
+  //   return `This action updates a #${id} order`;
+  // }
 
-  remove(id: number) {
-    return `This action removes a #${id} order`;
-  }
+  // remove(id: number) {
+  //   return `This action removes a #${id} order`;
+  // }
 
   private async generateOrderNum(): Promise<string> {
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';

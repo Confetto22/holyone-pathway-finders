@@ -9,7 +9,8 @@ export class CreateOrderDto {
     fullName: string;
     email: string;
     phone: string;
-    country: string;
+
+    country?: string;
   };
 
   @IsObject()
